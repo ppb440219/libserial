@@ -94,7 +94,7 @@ DWORD WINAPI input_thread_handle(void* param)
     unsigned char buf;
     HANDLE evt_array[NUM_INPUT_HANDLES];
 
-    OVERLAPPED osReader = { 0 };
+    OVERLAPPED read_evt = { 0 };
     HANDLE oev = CreateEvent(NULL, TRUE, FALSE, NULL);
 
     if (oev == NULL) {
@@ -106,10 +106,10 @@ DWORD WINAPI input_thread_handle(void* param)
     evt_array[1] = ctx->wait_evt;
 
     while (1) {
-        memset(&osReader, 0, sizeof(osReader));
-        osReader.hEvent = oev;
+        memset(&read_evt, 0, sizeof(read_evt));
+        read_evt.hEvent = oev;
 
-        bool readret = ReadFile(ctx->h_comm, &buf, 1, &bytes_read, &osReader);
+        bool readret = ReadFile(ctx->h_comm, &buf, 1, &bytes_read, &read_evt);
         if (!readret && GetLastError() != ERROR_IO_PENDING) {
             cout << "read error:" << GetLastError() << endl;
             break;
@@ -118,7 +118,7 @@ DWORD WINAPI input_thread_handle(void* param)
         DWORD ret = WaitForMultipleObjects(NUM_INPUT_HANDLES, evt_array, FALSE, INFINITE);
         switch (ret) {
             case WAIT_OBJECT_0:
-                readret = GetOverlappedResult(ctx->h_comm, &osReader, &bytes_read, TRUE);
+                readret = GetOverlappedResult(ctx->h_comm, &read_evt, &bytes_read, TRUE);
 
                 if (bytes_read > 0) {
                     if (print_hex)
@@ -338,7 +338,7 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
             break;
         default:
             cout << "not supported flow control" << endl;
-            break;
+            return false;
     }
 
     if (!SetCommState(port_handle, &dcb)) {
