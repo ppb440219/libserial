@@ -3,16 +3,18 @@
 #include <iostream>
 #include <string>
 #include "win_serial.h"
+#include "../log.h"
 
-#define print_hex false
 #define NUM_INPUT_HANDLES 2
+
+#define TAG "win_serial"
 
 using namespace std;
 
-win_serial* win_serial::instance = NULL;
+win_serial *win_serial::instance = NULL;
 CRITICAL_SECTION win_serial::lock;
 
-DWORD write_to_hal(HANDLE h_comm, const unsigned char* buf, DWORD len)
+DWORD write_to_hal(HANDLE h_comm, const unsigned char *buf, DWORD len)
 {
     OVERLAPPED osWrite = { 0 };
     DWORD bytes_write;
@@ -53,9 +55,9 @@ DWORD write_to_hal(HANDLE h_comm, const unsigned char* buf, DWORD len)
     return ret;
 }
 
-DWORD WINAPI output_thread_handle(void* param)
+DWORD WINAPI output_thread_handle(void *param)
 {
-    struct win_serial::thread_ctx* ctx = (struct win_serial::thread_ctx*)param;
+    struct win_serial::thread_ctx *ctx = (struct win_serial::thread_ctx*)param;
 
     while (1) {
         WaitForSingleObject(ctx->wait_evt, INFINITE);
@@ -75,21 +77,21 @@ DWORD WINAPI output_thread_handle(void* param)
                 delete data;
             }
             else {
-                cout << "write err: " << ret << endl;
+                LOG_E("write err: %lu", ret);
                 //TODO: how to handle error happen
             }
         }
     }
 
     CloseHandle(ctx->wait_evt);
-    cout << "write thread exit" << endl;
+    LOG_I("write thread exit");
 
     return 0;
 }
 
-DWORD WINAPI input_thread_handle(void* param)
+DWORD WINAPI input_thread_handle(void *param)
 {
-    struct win_serial::thread_ctx* ctx = (struct win_serial::thread_ctx*)param;
+    struct win_serial::thread_ctx *ctx = (struct win_serial::thread_ctx*)param;
     DWORD bytes_read;
     unsigned char buf;
     HANDLE evt_array[NUM_INPUT_HANDLES];
@@ -98,7 +100,7 @@ DWORD WINAPI input_thread_handle(void* param)
     HANDLE oev = CreateEvent(NULL, TRUE, FALSE, NULL);
 
     if (oev == NULL) {
-        cout << "create input overlapped wait evt failed" << endl;
+        LOG_E("create input overlapped wait evt failed");
         return 0;
     }
 
@@ -111,7 +113,7 @@ DWORD WINAPI input_thread_handle(void* param)
 
         bool readret = ReadFile(ctx->h_comm, &buf, 1, &bytes_read, &read_evt);
         if (!readret && GetLastError() != ERROR_IO_PENDING) {
-            cout << "read error:" << GetLastError() << endl;
+            LOG_E("read error: %lu", GetLastError());
             break;
         }
 
@@ -120,12 +122,8 @@ DWORD WINAPI input_thread_handle(void* param)
             case WAIT_OBJECT_0:
                 readret = GetOverlappedResult(ctx->h_comm, &read_evt, &bytes_read, TRUE);
 
-                if (bytes_read > 0) {
-                    if (print_hex)
-                        cout << hex << (int)buf << " ";
-                    else
-                        cout << buf;
-                }
+                if (bytes_read > 0)
+                    LOG_HEX(buf);
                 break;
             case WAIT_OBJECT_0 + 1:
                 if (ctx->exit)
@@ -137,12 +135,12 @@ DWORD WINAPI input_thread_handle(void* param)
 end_thread:
     CloseHandle(oev);
     CloseHandle(ctx->wait_evt);
-    cout << "read thread exit" << endl;
+    LOG_I("read thread exit");
 
     return 0;
 }
 
-win_serial* win_serial::get_instance(void)
+win_serial *win_serial::get_instance(void)
 {
     InitializeCriticalSection(&lock);
     EnterCriticalSection(&lock);
@@ -198,13 +196,13 @@ bool win_serial::open(unsigned int port_num, unsigned int baud, parity parity, u
     EnterCriticalSection(&win_serial::lock);
 
     if (!serial_init(port_num)) {
-        cout << "init serial port " << port_num << " failed" << endl;
+        LOG_E("init serial port %d failed", port_num);
         ret = false;
         goto open_err;
     }
 
     if (!serial_config(baud, parity, data_bits, stop_bits, flow_control)) {
-        cout << "configure serial port " << port_num << " failed" << endl;
+        LOG_E("configure serial port %d failed", port_num);
         ret = false;
         goto open_err;
     }
@@ -281,7 +279,7 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
     COMMTIMEOUTS timeout;
 
     if (!GetCommState(port_handle, &dcb)) {
-        cout << "config get state fail" << endl;
+        LOG_E("config get state fail");
         return false;
     }
 
@@ -337,12 +335,12 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
             dcb.XonLim = 100;
             break;
         default:
-            cout << "not supported flow control" << endl;
+            LOG_E("not supported flow control");
             return false;
     }
 
     if (!SetCommState(port_handle, &dcb)) {
-        cout << "config serial fail" << endl;
+        LOG_E("config serial fail");
         return false;
     }
 
@@ -354,14 +352,14 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
     timeout.WriteTotalTimeoutConstant = 0;
 
     if (!SetCommTimeouts(port_handle, &timeout)) {
-        cout << "config timeout fail" << endl;
+        LOG_E("config timeout fail");
         return false;
     }
 
     return true;
 }
 
-bool win_serial::write(unsigned char* buf, int len)
+bool win_serial::write(unsigned char *buf, int len)
 {
     if (port_handle == INVALID_HANDLE_VALUE)
         return false;
@@ -369,7 +367,7 @@ bool win_serial::write(unsigned char* buf, int len)
     if (len == 0)
         return true;
 
-    serial_data* data = new serial_data(buf, len);
+    serial_data *data = new serial_data(buf, len);
     output_queue.push(data);
 
     SetEvent(output_thread_ctx.wait_evt);

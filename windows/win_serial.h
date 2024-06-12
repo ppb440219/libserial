@@ -1,7 +1,7 @@
 #ifdef WIN32
 
-#ifndef _WIN_SERIAL_
-#define _WIN_SERIAL_
+#ifndef _WIN_SERIAL_H_
+#define _WIN_SERIAL_H_
 
 #include <Windows.h>
 #include <queue>
@@ -80,5 +80,5 @@ private:
     queue<serial_data*> output_queue;
 };
 
-#endif //_WIN_SERIAL_
+#endif //_WIN_SERIAL_H_
 #endif //WIN32
