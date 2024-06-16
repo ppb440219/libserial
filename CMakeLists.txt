@@ -3,7 +3,7 @@
 #
 cmake_minimum_required (VERSION 3.8)
 
-project ("serial-port-lib")
+project ("libserial")
 
-add_executable (serial-port-lib "serial_port_lib.cpp" "serial_port_lib.h" "windows/win_serial.h" "windows/win_serial.cpp" "windows/serial_data.h" "log.h")
-
+add_executable (libserial "test.cpp"  "windows/win_serial.h" "windows/win_serial.cpp" "windows/serial_data.h" "log.h" "serial_factory.h" "serial_intf.h")
+target_include_directories(libserial PRIVATE ".")

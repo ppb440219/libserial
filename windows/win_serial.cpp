@@ -122,8 +122,8 @@ DWORD WINAPI input_thread_handle(void *param)
             case WAIT_OBJECT_0:
                 readret = GetOverlappedResult(ctx->h_comm, &read_evt, &bytes_read, TRUE);
 
-                if (bytes_read > 0)
-                    LOG_HEX(buf);
+                if (bytes_read > 0 && ctx->rcv_callback != NULL)
+                    ctx->rcv_callback(buf);
                 break;
             case WAIT_OBJECT_0 + 1:
                 if (ctx->exit)
@@ -187,7 +187,7 @@ list<int> win_serial::get_available_port()
     return portList;
 }
 
-bool win_serial::open(unsigned int port_num, unsigned int baud, parity parity, unsigned int data_bits,
+bool win_serial::open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
     stop_bits stop_bits, flow_control flow_control)
 {
     bool ret = true;
@@ -373,6 +373,11 @@ bool win_serial::write(unsigned char *buf, int len)
     SetEvent(output_thread_ctx.wait_evt);
 
     return true;
+}
+
+void win_serial::register_data_cb(received_cb callback)
+{
+    input_thread_ctx.rcv_callback = callback;
 }
 
 #endif //WIN32

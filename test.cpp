@@ -1,19 +1,24 @@
-﻿#include "serial_port_lib.h"
-
-#ifdef WIN32
-#include "windows/win_serial.h"
-#endif
+﻿#include <iostream>
+#include "serial_intf.h"
+#include "serial_factory.h"
 
 using namespace std;
+
+void serial_received(uint8_t data) {
+	cout << (int)data;
+}
 
 int main()
 {
 	cout << "== Serial port tester ==" << endl << endl;
 
-	win_serial* serial = win_serial::get_instance();
+	serial_intf* serial = serial_factory::create_serial();
 	int port_id;
 	unsigned char test_data[] = { 0x03, 0x85, 0x04, 0x00, 0x00, 0x00, '\r', '\n' };
 	//unsigned char test_data[] = "write something!!";
+
+	if (serial == NULL)
+		cout << "get serial instance failed" << endl;
 
 	// select port
 	list<int> ports = serial->get_available_port();
@@ -35,6 +40,9 @@ int main()
 		return 0;
 	}
 	cout << "serial port: " << port_id << " opend" << endl;
+
+	// register received callback
+	serial->register_data_cb(serial_received);
 
 	/*for (int i = 0; i < 5; i++) {
 		test_data[5] = i;
