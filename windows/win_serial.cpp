@@ -256,7 +256,7 @@ void win_serial::close(void)
 
 bool win_serial::serial_init(unsigned int port_num)
 {
-    string port_name = "COM" + to_string(port_num);
+    string port_name = "\\\\.\\COM" + to_string(port_num);
 
     port_handle = CreateFile(port_name.c_str(),
         GENERIC_READ | GENERIC_WRITE, // access mode
