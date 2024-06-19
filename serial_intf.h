@@ -44,7 +44,7 @@ typedef void (*received_cb)(uint8_t);
 
 class serial_intf {
 public:
-    virtual bool open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
+    virtual int open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
         stop_bits stop_bits, flow_control flow_control) = 0;
     virtual void close(void) = 0;
     virtual std::list<int> get_available_port(void) = 0;

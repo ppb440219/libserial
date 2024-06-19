@@ -1,13 +1,11 @@
-#ifdef WIN32
-
 #ifndef _WIN_SERIAL_H_
 #define _WIN_SERIAL_H_
 
 #include <Windows.h>
 #include <queue>
 #include <list>
-#include "serial_intf.h"
-#include "serial_data.h"
+#include "../serial_intf.h"
+#include "../serial_data.h"
 
 using namespace std;
 
@@ -25,7 +23,7 @@ public:
     static win_serial* get_instance(void);
     ~win_serial(void);
 
-    bool open(unsigned int port_num, baud_rate baud, parity parity = parity::no_parity, unsigned int data_bits = 8,
+    int open(unsigned int port_num, baud_rate baud, parity parity = parity::no_parity, unsigned int data_bits = 8,
         stop_bits stop_bits = stop_bits::one_stop_bits, flow_control flow_control = flow_control::no_flow_control);
     void close(void);
     list<int> get_available_port(void);
@@ -35,7 +33,7 @@ public:
 private:
     win_serial(void);
     bool serial_init(unsigned int port_num);
-    bool serial_config(unsigned int baud, parity parity, unsigned int data_bits, stop_bits stop_bits,
+    int serial_config(unsigned int baud, parity parity, unsigned int data_bits, stop_bits stop_bits,
         flow_control flow_control);
 
     static win_serial* instance;
@@ -47,4 +45,3 @@ private:
 };
 
 #endif //_WIN_SERIAL_H_
-#endif //WIN32

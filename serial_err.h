@@ -1,0 +1,9 @@
+#ifndef _SERIAL_ERR_H_
+#define _SERIAL_ERR_H_
+
+#define SERIAL_OPEN_FAILED -1
+#define SERIAL_GET_STATE_FAILED -2
+#define SERIAL_ERR_FLOW_CONTROL -3
+#define SERIAL_CONFIG_FAILED -4
+
+#endif //_SERIAL_ERR_H_

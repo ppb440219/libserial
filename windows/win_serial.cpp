@@ -1,9 +1,7 @@
-#ifdef WIN32
-
 #include <iostream>
 #include <string>
 #include "win_serial.h"
-#include "../log.h"
+#include "../serial_err.h"
 
 #define NUM_INPUT_HANDLES 2
 
@@ -16,22 +14,22 @@ CRITICAL_SECTION win_serial::lock;
 
 DWORD write_to_hal(HANDLE h_comm, const unsigned char *buf, DWORD len)
 {
-    OVERLAPPED osWrite = { 0 };
+    OVERLAPPED ove = { 0 };
     DWORD bytes_write;
     DWORD ret;
 
-    osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (osWrite.hEvent == NULL)
+    ove.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (ove.hEvent == NULL)
         return FALSE;
 
-    if (!WriteFile(h_comm, buf, len, &bytes_write, &osWrite)) {
+    if (!WriteFile(h_comm, buf, len, &bytes_write, &ove)) {
         if (GetLastError() != ERROR_IO_PENDING)
             ret = GetLastError();
         else {
-            DWORD dwRes = WaitForSingleObject(osWrite.hEvent, INFINITE);
+            DWORD dwRes = WaitForSingleObject(ove.hEvent, INFINITE);
             switch (dwRes) {
                 case WAIT_OBJECT_0:
-                    if (!GetOverlappedResult(h_comm, &osWrite, &bytes_write, FALSE))
+                    if (!GetOverlappedResult(h_comm, &ove, &bytes_write, FALSE))
                         ret = GetLastError();
                     else {
                         // write completed successfully
@@ -51,7 +49,7 @@ DWORD write_to_hal(HANDLE h_comm, const unsigned char *buf, DWORD len)
         ret = ERROR_SUCCESS;
     }
 
-    CloseHandle(osWrite.hEvent);
+    CloseHandle(ove.hEvent);
     return ret;
 }
 
@@ -77,14 +75,12 @@ DWORD WINAPI output_thread_handle(void *param)
                 delete data;
             }
             else {
-                LOG_E("write err: %lu", ret);
-                //TODO: how to handle error happen
+                // TODO: how to handle write error?
             }
         }
     }
 
     CloseHandle(ctx->wait_evt);
-    LOG_I("write thread exit");
 
     return 0;
 }
@@ -99,10 +95,8 @@ DWORD WINAPI input_thread_handle(void *param)
     OVERLAPPED read_evt = { 0 };
     HANDLE oev = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-    if (oev == NULL) {
-        LOG_E("create input overlapped wait evt failed");
+    if (oev == NULL)
         return 0;
-    }
 
     evt_array[0] = oev;
     evt_array[1] = ctx->wait_evt;
@@ -113,7 +107,7 @@ DWORD WINAPI input_thread_handle(void *param)
 
         bool readret = ReadFile(ctx->h_comm, &buf, 1, &bytes_read, &read_evt);
         if (!readret && GetLastError() != ERROR_IO_PENDING) {
-            LOG_E("read error: %lu", GetLastError());
+            // get IO error from GetLastError()
             break;
         }
 
@@ -135,7 +129,6 @@ DWORD WINAPI input_thread_handle(void *param)
 end_thread:
     CloseHandle(oev);
     CloseHandle(ctx->wait_evt);
-    LOG_I("read thread exit");
 
     return 0;
 }
@@ -187,25 +180,22 @@ list<int> win_serial::get_available_port()
     return portList;
 }
 
-bool win_serial::open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
+int win_serial::open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
     stop_bits stop_bits, flow_control flow_control)
 {
-    bool ret = true;
+    int ret = 0;
     DWORD out_thread_id, in_thread_id; /* required for Win9x */
 
     EnterCriticalSection(&win_serial::lock);
 
     if (!serial_init(port_num)) {
-        LOG_E("init serial port %d failed", port_num);
-        ret = false;
+        ret = SERIAL_OPEN_FAILED;
         goto open_err;
     }
 
-    if (!serial_config(baud, parity, data_bits, stop_bits, flow_control)) {
-        LOG_E("configure serial port %d failed", port_num);
-        ret = false;
+    ret = serial_config(baud, parity, data_bits, stop_bits, flow_control);
+    if (ret < 0)
         goto open_err;
-    }
 
     // clear RX/TX buffer
     PurgeComm(port_handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
@@ -272,16 +262,14 @@ bool win_serial::serial_init(unsigned int port_num)
     return true;
 }
 
-bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int data_bits, stop_bits stop_bits,
+int win_serial::serial_config(unsigned int baud, parity parity, unsigned int data_bits, stop_bits stop_bits,
     flow_control flow_control)
 {
     DCB dcb = { 0 };
     COMMTIMEOUTS timeout;
 
-    if (!GetCommState(port_handle, &dcb)) {
-        LOG_E("config get state fail");
-        return false;
-    }
+    if (!GetCommState(port_handle, &dcb))
+        return SERIAL_GET_STATE_FAILED;
 
     // configure serial port
     dcb.BaudRate = baud;
@@ -335,14 +323,11 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
             dcb.XonLim = 100;
             break;
         default:
-            LOG_E("not supported flow control");
-            return false;
+            return SERIAL_ERR_FLOW_CONTROL;
     }
 
-    if (!SetCommState(port_handle, &dcb)) {
-        LOG_E("config serial fail");
-        return false;
-    }
+    if (!SetCommState(port_handle, &dcb))
+        return SERIAL_CONFIG_FAILED;
 
     // set serial port expire time, all 0 means no expire
     timeout.ReadIntervalTimeout = 0;
@@ -351,12 +336,10 @@ bool win_serial::serial_config(unsigned int baud, parity parity, unsigned int da
     timeout.WriteTotalTimeoutMultiplier = 0;
     timeout.WriteTotalTimeoutConstant = 0;
 
-    if (!SetCommTimeouts(port_handle, &timeout)) {
-        LOG_E("config timeout fail");
-        return false;
-    }
+    if (!SetCommTimeouts(port_handle, &timeout))
+        return SERIAL_CONFIG_FAILED;
 
-    return true;
+    return 0;
 }
 
 bool win_serial::write(unsigned char *buf, int len)
@@ -379,5 +362,3 @@ void win_serial::register_data_cb(received_cb callback)
 {
     input_thread_ctx.rcv_callback = callback;
 }
-
-#endif //WIN32
