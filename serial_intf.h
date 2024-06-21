@@ -3,7 +3,7 @@
 
 #include <list>
 
-enum baud_rate {
+enum class baud_rate {
     BR_1200 = 1200,
     BR_2400 = 2400,
     BR_4800 = 4800,
@@ -17,7 +17,7 @@ enum baud_rate {
     BR_256000 = 256000,
 };
 
-enum parity {
+enum class parity {
     no_parity,
     odd_parity,
     even_parity,
@@ -25,13 +25,13 @@ enum parity {
     space_parity,
 };
 
-enum stop_bits {
+enum class stop_bits {
     one_stop_bits,
     one_point_five_stop_bits,
     two_stop_bits,
 };
 
-enum flow_control {
+enum class flow_control {
     no_flow_control,
     cts_rts_control,
     cts_dtr_control,
@@ -46,10 +46,18 @@ class serial_intf {
 public:
     virtual int open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
         stop_bits stop_bits, flow_control flow_control) = 0;
+
     virtual void close(void) = 0;
+
     virtual std::list<int> get_available_port(void) = 0;
-    virtual bool write(unsigned char* buf, int len) = 0;
+
+    virtual bool write(const uint8_t *buf, const uint32_t len) = 0;
+
     virtual void register_data_cb(received_cb cb) = 0;
+
+    unsigned int get_rate(baud_rate rate) {
+        return static_cast<unsigned int>(rate);
+    }
 };
 
 #endif //_SERIAL_INTF_H_

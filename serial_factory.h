@@ -9,9 +9,9 @@
 
 class serial_factory {
 public:
-	static serial_intf* create_serial(void) {
+	static std::unique_ptr<serial_intf> create_serial(void) {
 #ifdef WIN32
-		return (serial_intf*)win_serial::get_instance();
+		return std::unique_ptr<serial_intf>((serial_intf*)new win_serial());
 #else
 		return NULL;
 #endif

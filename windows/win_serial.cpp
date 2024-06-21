@@ -1,16 +1,13 @@
 #include <iostream>
 #include <string>
+#include <cassert>
 #include "win_serial.h"
 #include "../serial_err.h"
 
-#define NUM_INPUT_HANDLES 2
-
 #define TAG "win_serial"
 
-using namespace std;
-
-win_serial *win_serial::instance = NULL;
-CRITICAL_SECTION win_serial::lock;
+#define NUM_INPUT_HANDLES 2
+#define ASSERT() assert(nullptr)
 
 DWORD write_to_hal(HANDLE h_comm, const unsigned char *buf, DWORD len)
 {
@@ -133,19 +130,6 @@ end_thread:
     return 0;
 }
 
-win_serial *win_serial::get_instance(void)
-{
-    InitializeCriticalSection(&lock);
-    EnterCriticalSection(&lock);
-
-    if (instance == NULL)
-        instance = new win_serial();
-
-    LeaveCriticalSection(&lock);
-
-    return instance;
-}
-
 win_serial::win_serial(void)
 {
     port_handle = INVALID_HANDLE_VALUE;
@@ -157,7 +141,6 @@ win_serial::~win_serial(void)
 {
     if (port_handle != INVALID_HANDLE_VALUE)
        close();
-    DeleteCriticalSection(&lock);
 }
 
 list<int> win_serial::get_available_port()
@@ -180,22 +163,52 @@ list<int> win_serial::get_available_port()
     return portList;
 }
 
+BYTE win_serial::get_stop_bits(stop_bits stop_bits)
+{
+    switch (stop_bits) {
+        case stop_bits::one_stop_bits:
+            return ONESTOPBIT;
+        case stop_bits::one_point_five_stop_bits:
+            return ONE5STOPBITS;
+        case stop_bits::two_stop_bits:
+            return TWOSTOPBITS;
+        default:
+            ASSERT();
+    }
+}
+
+BYTE win_serial::get_parity(parity parity)
+{
+    switch (parity) {
+        case parity::no_parity:
+            return NOPARITY;
+        case parity::odd_parity:
+            return ODDPARITY;
+        case parity::even_parity:
+            return EVENPARITY;
+        case parity::mark_parity:
+            return MARKPARITY;
+        case parity::space_parity:
+            return SPACEPARITY;
+        default:
+            ASSERT();
+    }
+}
+
 int win_serial::open(unsigned int port_num, baud_rate baud, parity parity, unsigned int data_bits,
     stop_bits stop_bits, flow_control flow_control)
 {
     int ret = 0;
     DWORD out_thread_id, in_thread_id; /* required for Win9x */
 
-    EnterCriticalSection(&win_serial::lock);
-
     if (!serial_init(port_num)) {
         ret = SERIAL_OPEN_FAILED;
-        goto open_err;
+        return ret;
     }
 
     ret = serial_config(baud, parity, data_bits, stop_bits, flow_control);
     if (ret < 0)
-        goto open_err;
+        return ret;
 
     // clear RX/TX buffer
     PurgeComm(port_handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
@@ -212,15 +225,11 @@ int win_serial::open(unsigned int port_num, baud_rate baud, parity parity, unsig
     input_thread_ctx.buf = NULL;
     CreateThread(NULL, 0, input_thread_handle, &input_thread_ctx, 0, &in_thread_id);
 
-open_err:
-    LeaveCriticalSection(&win_serial::lock);
     return ret;
 }
 
 void win_serial::close(void)
 {
-    EnterCriticalSection(&win_serial::lock);
-
     // stop thread
     output_thread_ctx.exit = true;
     SetEvent(output_thread_ctx.wait_evt);
@@ -240,8 +249,6 @@ void win_serial::close(void)
         output_queue.pop();
         delete data;
     }
-
-    LeaveCriticalSection(&win_serial::lock);
 }
 
 bool win_serial::serial_init(unsigned int port_num)
@@ -262,7 +269,7 @@ bool win_serial::serial_init(unsigned int port_num)
     return true;
 }
 
-int win_serial::serial_config(unsigned int baud, parity parity, unsigned int data_bits, stop_bits stop_bits,
+int win_serial::serial_config(baud_rate rate, parity parity, unsigned int data_bits, stop_bits stop_bits,
     flow_control flow_control)
 {
     DCB dcb = { 0 };
@@ -272,9 +279,9 @@ int win_serial::serial_config(unsigned int baud, parity parity, unsigned int dat
         return SERIAL_GET_STATE_FAILED;
 
     // configure serial port
-    dcb.BaudRate = baud;
-    dcb.StopBits = stop_bits;
-    dcb.Parity = parity;
+    dcb.BaudRate = get_rate(rate);
+    dcb.StopBits = get_stop_bits(stop_bits);
+    dcb.Parity = get_parity(parity);
     dcb.ByteSize = data_bits;
     dcb.fDsrSensitivity = FALSE;
     switch (flow_control) {
@@ -342,7 +349,7 @@ int win_serial::serial_config(unsigned int baud, parity parity, unsigned int dat
     return 0;
 }
 
-bool win_serial::write(unsigned char *buf, int len)
+bool win_serial::write(const uint8_t *buf, const uint32_t len)
 {
     if (port_handle == INVALID_HANDLE_VALUE)
         return false;
