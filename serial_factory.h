@@ -13,7 +13,7 @@ public:
 #ifdef WIN32
 		return std::unique_ptr<serial_intf>((serial_intf*)new win_serial());
 #else
-		return NULL;
+		return nullptr;
 #endif
 	}
 };

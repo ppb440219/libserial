@@ -8,4 +8,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	set(SOURCE_LIST  "windows/win_serial.h" "windows/win_serial.cpp")
 endif()
 
-add_library(libserial ${SOURCE_LIST})
+add_executable (serial_tester "test_main.cpp" )
+
+target_link_libraries(serial_tester libserial)
